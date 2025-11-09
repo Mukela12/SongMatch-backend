@@ -4,6 +4,8 @@ import { PrismaClient } from '@prisma/client';
 import { Redis } from 'ioredis';
 import { prisma } from '../config/database';
 import { redis } from '../config/redis';
+import { MatchingService } from '../services/matching.service';
+import { MatchCacheService } from '../services/matchCache.service';
 
 /**
  * Dependency Injection Container Setup
@@ -16,13 +18,16 @@ import { redis } from '../config/redis';
 container.registerInstance<PrismaClient>('PrismaClient', prisma);
 container.registerInstance<Redis>('Redis', redis);
 
+// Register matching services
+container.registerSingleton<MatchingService>(MatchingService);
+container.registerSingleton<MatchCacheService>(MatchCacheService);
+
 // Register repositories (will be implemented later)
 // Example:
 // container.registerSingleton<UserRepository>('UserRepository', UserRepository);
 
-// Register services (will be implemented later)
+// Register other services (will be implemented later)
 // Example:
 // container.registerSingleton<AuthService>('AuthService', AuthService);
-// container.registerSingleton<MatchingService>('MatchingService', MatchingService);
 
 export { container };

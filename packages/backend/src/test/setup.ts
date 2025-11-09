@@ -1,3 +1,4 @@
+import 'reflect-metadata';
 import { beforeAll, afterAll, afterEach } from 'vitest';
 import { prisma } from '../config/database';
 import { redis } from '../config/redis';
