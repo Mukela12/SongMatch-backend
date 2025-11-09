@@ -1,0 +1,300 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextSearch", "postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  email     String   @unique @db.VarChar(255)
+  username  String   @unique @db.VarChar(50)
+  password  String   @db.VarChar(255) // Bcrypt hashed
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+
+  // OAuth Tokens (encrypted)
+  spotifyAccessToken    String?   @db.Text
+  spotifyRefreshToken   String?   @db.Text
+  spotifyTokenExpiry    DateTime? @db.Timestamptz
+  spotifyUserId         String?   @db.VarChar(255)
+  appleMusicToken       String?   @db.Text
+  appleMusicTokenExpiry DateTime? @db.Timestamptz
+
+  // User Stats
+  totalGamesPlayed  Int     @default(0)
+  totalRoundsPlayed Int     @default(0)
+  totalGamesWon     Int     @default(0)
+  totalGamesLost    Int     @default(0)
+  averageMatchScore Decimal @default(0) @db.Decimal(5, 2)
+
+  // ELO Rating System
+  eloRating     Int @default(1000)
+  peakEloRating Int @default(1000)
+  currentStreak Int @default(0)
+  longestStreak Int @default(0)
+
+  // Preferences
+  preferences Json @default("{}")
+
+  // Soft delete
+  deletedAt DateTime? @db.Timestamptz
+
+  // Relations
+  gamesAsPlayer1 GameSession[] @relation("Player1Games")
+  gamesAsPlayer2 GameSession[] @relation("Player2Games")
+  playlists      UserPlaylist[]
+
+  @@index([email])
+  @@index([username])
+  @@index([eloRating])
+  @@index([createdAt])
+  @@map("users")
+}
+
+// ============================================================================
+// GAME MANAGEMENT
+// ============================================================================
+
+model GameSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+  updatedAt DateTime @updatedAt @db.Timestamptz
+  startedAt DateTime? @db.Timestamptz
+  endedAt   DateTime? @db.Timestamptz
+
+  // Game Status
+  status GameStatus @default(WAITING)
+
+  // Game Settings
+  maxRounds     Int          @default(10)
+  currentRound  Int          @default(1)
+  musicService  MusicService @default(SPOTIFY)
+  allowExplicit Boolean      @default(true)
+  region        String       @default("US") @db.Char(2)
+  gameMode      GameMode     @default(ONLINE)
+
+  // Players
+  player1Id String  @db.Uuid
+  player2Id String? @db.Uuid
+  player1   User    @relation("Player1Games", fields: [player1Id], references: [id], onDelete: Cascade)
+  player2   User?   @relation("Player2Games", fields: [player2Id], references: [id], onDelete: Cascade)
+
+  // Scores
+  player1Score Int @default(0)
+  player2Score Int @default(0)
+
+  // Metadata
+  winnerId String? @db.Uuid
+
+  // Relations
+  rounds GameRound[]
+
+  @@index([status])
+  @@index([player1Id, player2Id])
+  @@index([createdAt])
+  @@index([winnerId])
+  @@map("game_sessions")
+}
+
+model GameRound {
+  id            String   @id @default(uuid()) @db.Uuid
+  gameSessionId String   @db.Uuid
+  roundNumber   Int
+  createdAt     DateTime @default(now()) @db.Timestamptz
+  completedAt   DateTime? @db.Timestamptz
+
+  // Players
+  firstPlayerId  String @db.Uuid
+  secondPlayerId String @db.Uuid
+
+  // Song Selections
+  firstPlayerSongId        String        @db.VarChar(150) // platform:trackId
+  secondPlayerSongId       String?       @db.VarChar(150)
+  firstPlayerSongPlatform  MusicService
+  secondPlayerSongPlatform MusicService?
+
+  // Submission Timestamps (for time bonuses)
+  firstPlayerSubmittedAt  DateTime? @db.Timestamptz
+  secondPlayerSubmittedAt DateTime? @db.Timestamptz
+
+  // Match Results
+  matchScore       Int?
+  matchConfidence  Decimal? @db.Decimal(3, 2) // 0.00 - 1.00
+  matchBreakdown   Json? // Layer scores
+  matchExplanation Json? // Human-readable explanation
+
+  // Points Awarded
+  firstPlayerPoints  Int?
+  secondPlayerPoints Int?
+
+  // Metadata
+  processingTimeMs Int?
+  algorithmVersion String @default("1.0") @db.VarChar(10)
+
+  // Relations
+  gameSession GameSession @relation(fields: [gameSessionId], references: [id], onDelete: Cascade)
+
+  @@unique([gameSessionId, roundNumber])
+  @@index([gameSessionId])
+  @@index([firstPlayerSongId])
+  @@index([secondPlayerSongId])
+  @@map("game_rounds")
+}
+
+// ============================================================================
+// SONG CACHING
+// ============================================================================
+
+model SongCache {
+  id       String       @id @db.VarChar(150) // platform:trackId
+  platform MusicService
+
+  // Basic Info
+  title       String   @db.VarChar(255)
+  artist      String   @db.VarChar(255)
+  album       String?  @db.VarChar(255)
+  releaseYear Int?
+  durationMs  Int?
+  explicit    Boolean  @default(false)
+  popularity  Int? // 0-100 (Spotify)
+
+  // URLs
+  previewUrl  String? @db.Text
+  fullUrl     String? @db.Text
+  albumArtUrl String? @db.Text
+
+  // ISRC for cross-platform matching
+  isrc String? @db.VarChar(20)
+
+  // Audio Features (JSON for flexibility)
+  features Json // AudioFeatures object
+  genres   String[] // Array of genre strings
+
+  // Cache Metadata
+  cachedAt     DateTime @default(now()) @db.Timestamptz
+  lastAccessed DateTime @default(now()) @db.Timestamptz
+  accessCount  Int      @default(0)
+
+  // Estimated features flag
+  featuresEstimated Boolean @default(false)
+
+  @@index([platform])
+  @@index([title, artist])
+  @@index([isrc])
+  @@index([cachedAt])
+  @@index([lastAccessed]) // For cache eviction
+  @@map("song_cache")
+}
+
+// ============================================================================
+// MATCH HISTORY (for analytics & validation)
+// ============================================================================
+
+model MatchHistory {
+  id        String   @id @default(uuid()) @db.Uuid
+  createdAt DateTime @default(now()) @db.Timestamptz
+
+  // Songs
+  song1Id String @db.VarChar(150)
+  song2Id String @db.VarChar(150)
+
+  // Match Result
+  matchScore      Int
+  matchConfidence Decimal @db.Decimal(3, 2)
+  matchBreakdown  Json
+
+  // Algorithm Version (for A/B testing)
+  algorithmVersion String @db.VarChar(10)
+
+  // Human Validation (optional)
+  humanScore    Int?    // If human rated this match
+  humanFeedback String? @db.Text
+
+  // Metadata
+  processingTimeMs Int?
+
+  @@index([song1Id, song2Id])
+  @@index([createdAt])
+  @@index([algorithmVersion])
+  @@map("match_history")
+}
+
+// ============================================================================
+// USER PLAYLISTS (Discovery Feature)
+// ============================================================================
+
+model UserPlaylist {
+  id          String   @id @default(uuid()) @db.Uuid
+  userId      String   @db.Uuid
+  name        String   @db.VarChar(255)
+  description String?  @db.Text
+  createdAt   DateTime @default(now()) @db.Timestamptz
+  updatedAt   DateTime @updatedAt @db.Timestamptz
+
+  // Visibility
+  isPublic Boolean @default(false)
+
+  // Relations
+  user  User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items PlaylistItem[]
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("user_playlists")
+}
+
+model PlaylistItem {
+  id         String       @id @default(uuid()) @db.Uuid
+  playlistId String       @db.Uuid
+  songId     String       @db.VarChar(150) // platform:trackId
+  platform   MusicService
+  position   Int // Order in playlist
+  addedAt    DateTime     @default(now()) @db.Timestamptz
+
+  // Relations
+  playlist UserPlaylist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+
+  @@unique([playlistId, position])
+  @@index([playlistId])
+  @@index([songId])
+  @@map("playlist_items")
+}
+
+// ============================================================================
+// ENUMS
+// ============================================================================
+
+enum GameStatus {
+  WAITING   // Waiting for player 2
+  ACTIVE    // Game in progress
+  COMPLETED // Game finished
+  ABANDONED // Player left
+
+  @@map("game_status")
+}
+
+enum MusicService {
+  SPOTIFY
+  APPLE
+  YOUTUBE
+
+  @@map("music_service")
+}
+
+enum GameMode {
+  ONLINE    // Server-authoritative, WebSocket
+  IN_PERSON // Peer-to-peer, Bluetooth/WiFi-Direct
+
+  @@map("game_mode")
+}
