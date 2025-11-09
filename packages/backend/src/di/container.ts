@@ -6,6 +6,8 @@ import { prisma } from '../config/database';
 import { redis } from '../config/redis';
 import { MatchingService } from '../services/matching.service';
 import { MatchCacheService } from '../services/matchCache.service';
+import { SpotifyService } from '../services/spotify.service';
+import { SongCacheService } from '../services/songCache.service';
 
 /**
  * Dependency Injection Container Setup
@@ -21,6 +23,10 @@ container.registerInstance<Redis>('Redis', redis);
 // Register matching services
 container.registerSingleton<MatchingService>(MatchingService);
 container.registerSingleton<MatchCacheService>(MatchCacheService);
+
+// Register music services
+container.registerSingleton<SpotifyService>(SpotifyService);
+container.registerSingleton<SongCacheService>(SongCacheService);
 
 // Register repositories (will be implemented later)
 // Example:

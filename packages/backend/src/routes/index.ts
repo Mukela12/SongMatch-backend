@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { healthRouter } from './health.routes';
+import { musicRouter } from './music.routes';
 
 /**
  * Main API Router (v1)
@@ -11,6 +12,9 @@ export const apiRouter = Router();
 // Health and status routes
 apiRouter.use('/health', healthRouter);
 
+// Music routes (Spotify integration, song search, matching)
+apiRouter.use('/music', musicRouter);
+
 // Auth routes (to be implemented)
 // apiRouter.use('/auth', authRouter);
 
@@ -19,9 +23,6 @@ apiRouter.use('/health', healthRouter);
 
 // Game routes (to be implemented)
 // apiRouter.use('/games', gameRouter);
-
-// Song routes (to be implemented)
-// apiRouter.use('/songs', songRouter);
 
 // API info endpoint
 apiRouter.get('/', (req, res) => {
@@ -33,10 +34,10 @@ apiRouter.get('/', (req, res) => {
       documentation: '/api/v1/docs',
       endpoints: {
         health: '/api/v1/health',
-        auth: '/api/v1/auth',
-        users: '/api/v1/users',
-        games: '/api/v1/games',
-        songs: '/api/v1/songs',
+        music: '/api/v1/music',
+        auth: '/api/v1/auth (coming soon)',
+        users: '/api/v1/users (coming soon)',
+        games: '/api/v1/games (coming soon)',
       },
     },
   });
