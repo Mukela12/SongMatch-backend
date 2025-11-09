@@ -3,6 +3,8 @@ import cors from 'cors';
 import helmet from 'helmet';
 import { env } from './config/env';
 import { logger } from './utils/logger';
+import { apiRouter } from './routes';
+import { errorHandler } from './middleware/errorHandler';
 
 export const app = express();
 
@@ -21,11 +23,17 @@ app.use(express.urlencoded({ extended: true }));
 
 // Request logging middleware
 app.use((req: Request, res: Response, next: NextFunction) => {
-  logger.info(`${req.method} ${req.path}`);
+  const start = Date.now();
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.info(`${req.method} ${req.path} ${res.statusCode} - ${duration}ms`);
+  });
+
   next();
 });
 
-// Health check endpoint
+// Root health check (for quick status)
 app.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'healthy',
@@ -35,14 +43,8 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// API v1 routes (to be implemented)
-app.get('/api/v1', (req: Request, res: Response) => {
-  res.json({
-    message: 'SongMatch API v1',
-    version: '1.0.0',
-    documentation: '/api/v1/docs',
-  });
-});
+// API v1 routes
+app.use('/api/v1', apiRouter);
 
 // 404 handler
 app.use((req: Request, res: Response) => {
@@ -56,16 +58,4 @@ app.use((req: Request, res: Response) => {
 });
 
 // Global error handler
-app.use((err: Error, req: Request, res: Response, next: NextFunction) => {
-  logger.error(`Error: ${err.message}`, err);
-
-  res.status(500).json({
-    success: false,
-    error: {
-      code: 'INTERNAL_ERROR',
-      message: env.NODE_ENV === 'production'
-        ? 'Internal server error'
-        : err.message,
-    },
-  });
-});
+app.use(errorHandler);
